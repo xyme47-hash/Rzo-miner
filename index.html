@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>RZO Network</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <script src="https://adsgram.ai/sdk/v1/adsgram-sdk.js"></script>
+    <style>
+        :root { --yellow: #f3ba2f; --bg: #0b0e11; --card: #181a20; }
+        body { background: var(--bg); color: white; font-family: sans-serif; margin: 0; padding: 0; user-select: none; }
+        
+        /* Header */
+        .header { padding: 20px; background: var(--card); text-align: center; border-bottom: 2px solid var(--yellow); }
+        .balance { font-size: 38px; font-weight: bold; color: var(--yellow); }
+
+        /* Tabs Logic */
+        .tab-content { display: none; padding: 20px; padding-bottom: 100px; animation: fadeIn 0.3s; }
+        .active-tab { display: block; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+        /* Mining Tab */
+        .coin-btn { width: 200px; height: 200px; background: radial-gradient(var(--yellow), #96710b); border-radius: 50%; border: 8px solid #333; margin: 30px auto; display: flex; align-items: center; justify-content: center; font-size: 40px; font-weight: bold; cursor: pointer; box-shadow: 0 0 20px rgba(243, 186, 47, 0.2); }
+        .coin-btn:active { transform: scale(0.92); }
+        .progress-bar { width: 100%; height: 12px; background: #333; border-radius: 10px; overflow: hidden; margin: 15px 0; }
+        .progress-fill { height: 100%; width: 100%; background: var(--yellow); transition: 0.3s; }
+
+        /* Buttons & Tasks */
+        .btn { width: 100%; padding: 15px; border-radius: 12px; border: none; font-weight: bold; margin-bottom: 10px; cursor: pointer; color: white; font-size: 14px; }
+        .btn-ad { background: #28a745; }
+        .btn-blue { background: #007bff; }
+        .task-card { background: var(--card); padding: 15px; border-radius: 12px; margin-bottom: 10px; border: 1px solid #333; display: flex; justify-content: space-between; align-items: center; }
+        .timer-label { font-size: 11px; display: block; opacity: 0.7; }
+
+        /* Footer Navigation */
+        .nav-bar { position: fixed; bottom: 0; width: 100%; background: var(--card); display: flex; border-top: 1px solid #333; padding: 10px 0; }
+        .nav-item { flex: 1; text-align: center; color: #848e9c; font-size: 12px; cursor: pointer; }
+        .nav-item.active { color: var(--yellow); }
+    </style>
+</head>
+<body>
+
+<div class="header">
+    <div style="font-size: 12px; color: #848e9c;">RZO BALANCE</div>
+    <div class="balance" id="balanceDisplay">0</div>
+</div>
+
+<div id="mining" class="tab-content active-tab">
+    <div class="coin-btn" onclick="handleTap(event)">RZO</div>
+    <div id="energyText" style="font-weight: bold;">Energy: 500/500</div>
+    <div class="progress-bar"><div class="progress-fill" id="energyFill"></div></div>
+    
+    <button class="btn btn-ad" onclick="playAd('bonus')">🎁 Daily Bonus (1,000 RZO)<br><span id="bonusTimer" class="timer-label">Available Now</span></button>
+    <button class="btn btn-blue" onclick="playAd('refill')">⚡ Energy Refill (Ad)<br><span id="refillTimer" class="timer-label">Available Now</span></button>
+</div>
+
+<div id="tasks" class="tab-content">
+    <h2>Earn More RZO</h2>
+    <div class="task-card">
+        <div><b>Join Telegram</b><br><span style="color:var(--yellow)">+5,000 RZO</span></div>
+        <button class="btn" style="width:80px; margin:0; background:var(--yellow); color:black;" onclick="completeTask('https://t.me/YourChannel', 5000)">Join</button>
+    </div>
+    <div class="task-card">
+        <div><b>Special Video Task</b><br><span id="taskTimer" class="timer-label">Available Now</span></div>
+        <button class="btn btn-ad" style="width:80px; margin:0;" onclick="playAd('task')">Watch</button>
+    </div>
+</div>
+
+<div id="wallet" class="tab-content">
+    <div style="margin-top:100px;">
+        <img src="https://cdn-icons-png.flaticon.com/512/2535/2535072.png" width="100" style="opacity:0.5;">
+        <h3>Wallet Coming Soon</h3>
+        <p style="color:#848e9c">Minimum $50 AdsGram kamai ke baad withdraw khulega.</p>
+    </div>
+</div>
+
+<div class="nav-bar">
+    <div class="nav-item active" onclick="showTab('mining', this)">⛏️<br>Mining</div>
+    <div class="nav-item" onclick="showTab('tasks', this)">📋<br>Tasks</div>
+    <div class="nav-item" onclick="showTab('wallet', this)">💰<br>Wallet</div>
+</div>
+
+<script>
+    const tg = window.Telegram.WebApp;
+    tg.expand();
+
+    let balance = parseInt(localStorage.getItem('rzo_bal')) || 0;
+    let energy = parseInt(localStorage.getItem('rzo_eng')) || 500;
+    let lastBonus = parseInt(localStorage.getItem('t_bonus')) || 0;
+    let lastRefill = parseInt(localStorage.getItem('t_refill')) || 0;
+    let lastTask = parseInt(localStorage.getItem('t_task')) || 0;
+
+    const AdController = window.Adsgram.init({ blockId: "YOUR_ADSGRAM_BLOCK_ID" });
+
+    function updateUI() {
+        document.getElementById('balanceDisplay').innerText = balance.toLocaleString();
+        document.getElementById('energyText').innerText = `Energy: ${energy}/500`;
+        document.getElementById('energyFill').style.width = (energy/500)*100 + "%";
+        localStorage.setItem('rzo_bal', balance);
+        localStorage.setItem('rzo_eng', energy);
+        checkTimers();
+    }
+
+    function showTab(tabId, el) {
+        document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active-tab'));
+        document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+        document.getElementById(tabId).classList.add('active-tab');
+        el.classList.add('active');
+    }
+
+    function handleTap(e) {
+        if (energy > 0) {
+            balance++; energy--;
+            tg.HapticFeedback.impactOccurred('light');
+            updateUI();
+        } else { tg.showAlert("Ad dekh kar energy refill karein!"); }
+    }
+
+    async function playAd(type) {
+        const now = Date.now();
+        let cd = (type==='bonus') ? 12*60*60*1000 : (type==='refill') ? 15*60*1000 : 60*60*1000;
+        let lt = (type==='bonus') ? lastBonus : (type==='refill') ? lastRefill : lastTask;
+
+        if (now - lt < cd) { tg.showAlert("Wait for timer!"); return; }
+
+        try {
+            await AdController.show();
+            if(type==='bonus') { balance+=1000; lastBonus=now; localStorage.setItem('t_bonus', now); }
+            else if(type==='refill') { energy=500; lastRefill=now; localStorage.setItem('t_refill', now); }
+            else if(type==='task') { balance+=2000; lastTask=now; localStorage.setItem('t_task', now); }
+            updateUI();
+            tg.showAlert("Reward added!");
+        } catch(e) { tg.showAlert("Ad error!"); }
+    }
+
+    function completeTask(url, reward) {
+        tg.openTelegramLink(url);
+        setTimeout(() => { balance+=reward; updateUI(); tg.showAlert("Joined! Reward added."); }, 3000);
+    }
+
+    function checkTimers() {
+        const now = Date.now();
+        document.getElementById('bonusTimer').innerText = (now-lastBonus < 12*60*60*1000) ? "Wait " + Math.ceil((12*60*60*1000-(now-lastBonus))/3600000) + "h" : "Available Now";
+        document.getElementById('refillTimer').innerText = (now-lastRefill < 15*60*1000) ? "Wait " + Math.ceil((15*60*1000-(now-lastRefill))/60000) + "m" : "Available Now";
+        document.getElementById('taskTimer').innerText = (now-lastTask < 60*60*1000) ? "Wait " + Math.ceil((60*60*1000-(now-lastTask))/60000) + "m" : "Available Now";
+    }
+
+    setInterval(() => { if(energy < 500) { energy++; updateUI(); } }, 3000);
+    updateUI();
+</script>
+</body>
+</html>
